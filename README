@@ -1,0 +1,4 @@
+This is my first foray into triangle rasterization.
+
+So far I have some matrix manipulation stuff and a mostly unoptimized
+half-plane triangle rasterizer. Let's see if I can make it faster and better!
