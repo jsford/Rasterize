@@ -1,36 +1,10 @@
 #include "SDL/SDL.h"
 #include <string>
 #include "draw.hpp"
+#include "fixedpt.h"
 
-//#define FLOAT_PT
-#define FIXED_PT
-
-// Baseline Fixed Point Speed: 3980 us
-// -Extra Shift: 3930 us
-// Baseline Floating Point Speed: 3210 us
-
-#define FIXEDPT_FBITS 8
-#define int2fp(I) ((fixedptd)(I) << FIXEDPT_FBITS)
-#define fp2int(F) ((F) >> FIXEDPT_FBITS)
-
-typedef    int32_t    fixedpt;
-typedef    int64_t    fixedptd;
-typedef    uint32_t   fixedptu;
-typedef    uint64_t   fixedptud;
-
-/* Multiplies two fixedpt numbers, returns the result. */
-static inline fixedpt
-fp_mul(fixedpt A, fixedpt B)
-{
-    return (((fixedptd)A * (fixedptd)B) >> FIXEDPT_FBITS);
-}
-
-/* Divides two fixedpt numbers, returns the result. */
-static inline fixedpt
-fp_div(fixedpt A, fixedpt B)
-{
-    return (((fixedptd)A << FIXEDPT_FBITS) / (fixedptd)B);
-}
+#define min3(a, b, c) std::min(std::min((a),(b)),(c))
+#define max3(a, b, c) std::max(std::max((a),(b)),(c))
 
 void putpixel(SDL_Surface *surface, int x, int y, Uint32 pixel) { 
 
@@ -197,12 +171,10 @@ void triangle(SDL_Surface* screen, const Vertex& v1, const Vertex& v2, const Ver
     const int FDY31 = DY31 << 4;
 
     // Bounding rectangle
-    using std::min;
-    using std::max;
-    int minx = (min(min(X1, X2), X3) + 0xF) >> 4;
-    int maxx = (max(max(X1, X2), X3) + 0xF) >> 4;
-    int miny = (min(min(Y1, Y2), Y3) + 0xF) >> 4;
-    int maxy = (max(max(Y1, Y2), Y3) + 0xF) >> 4;
+    int minx = (min3(X1, X2, X3) + 0xF) >> 4;
+    int maxx = (max3(X1, X2, X3) + 0xF) >> 4;
+    int miny = (min3(Y1, Y2, Y3) + 0xF) >> 4;
+    int maxy = (max3(Y1, Y2, Y3) + 0xF) >> 4;
 
     // Block size, standard 8x8 (must be power of two)
     const int q = 8;
@@ -223,12 +195,13 @@ void triangle(SDL_Surface* screen, const Vertex& v1, const Vertex& v2, const Ver
     if(DY23 < 0 || (DY23 == 0 && DX23 > 0)) C2++;
     if(DY31 < 0 || (DY31 == 0 && DX31 > 0)) C3++;
 
-    // Fixed Point 28.4 Color Calc Deltas
+    // Color Calculation Constants
     const int Y2_Y3 = DY23;
     const int X1_X3 = X1 - X3;
     const int X3_X2 = X3 - X2;
     const int Y1_Y3 = Y1 - Y3;
     const int Y3_Y1 = DY31;
+    const int denom = fp_mul<4>(Y2_Y3, X1_X3) + fp_mul<4>(X3_X2, Y1_Y3);
 
     // Loop through blocks
     for(int y = miny; y < maxy; y += q)
@@ -271,10 +244,9 @@ void triangle(SDL_Surface* screen, const Vertex& v1, const Vertex& v2, const Ver
                 {
                     for(int ix = x; ix < x + q; ix++)
                     {
-                        fixedpt denom = fp_mul(Y2_Y3, X1_X3) + fp_mul(X3_X2, Y1_Y3);
-                        fixedpt lambda1 = fp_div( fp_mul(Y2_Y3, (ix<<4)-X3) + fp_mul(X3_X2, (iy<<4)-Y3), denom);
-                        fixedpt lambda2 = fp_div( fp_mul(Y3_Y1, (ix<<4)-X3) + fp_mul(X1_X3, (iy<<4)-Y3), denom);  
-                        fixedpt lambda3 = int2fp(1) - lambda1 - lambda2;
+                        const int lambda1 = fp_div<4>( fp_mul<4>(Y2_Y3, int2fp<4>(ix)-X3) + fp_mul<4>(X3_X2, int2fp<4>(iy)-Y3), denom);
+                        const int lambda2 = fp_div<4>( fp_mul<4>(Y3_Y1, int2fp<4>(ix)-X3) + fp_mul<4>(X1_X3, int2fp<4>(iy)-Y3), denom);  
+                        const int lambda3 = int2fp<4>(1) - lambda1 - lambda2;
 
                         int r1 = 0, g1 = 0, b1 = 0;
                         int r2 = 0, g2 = 0, b2 = 0;
@@ -290,9 +262,9 @@ void triangle(SDL_Surface* screen, const Vertex& v1, const Vertex& v2, const Ver
                         g3 = (v3.color >> 8) & 0xFF;
                         b3 = v3.color & 0xFF;
 
-                        int red   = fp2int( fp_mul(lambda1, int2fp(r1)) + fp_mul(lambda2, int2fp(r2)) + fp_mul(lambda3, int2fp(r3)) );
-                        int green = fp2int( fp_mul(lambda1, int2fp(g1)) + fp_mul(lambda2, int2fp(g2)) + fp_mul(lambda3, int2fp(g3)) );
-                        int blue  = fp2int( fp_mul(lambda1, int2fp(b1)) + fp_mul(lambda2, int2fp(b2)) + fp_mul(lambda3, int2fp(b3)) );
+                        int red   = fp2int<4>( fp_mul<4>(lambda1, int2fp<4>(r1)) + fp_mul<4>(lambda2, int2fp<4>(r2)) + fp_mul<4>(lambda3, int2fp<4>(r3)) );
+                        int green = fp2int<4>( fp_mul<4>(lambda1, int2fp<4>(g1)) + fp_mul<4>(lambda2, int2fp<4>(g2)) + fp_mul<4>(lambda3, int2fp<4>(g3)) );
+                        int blue  = fp2int<4>( fp_mul<4>(lambda1, int2fp<4>(b1)) + fp_mul<4>(lambda2, int2fp<4>(b2)) + fp_mul<4>(lambda3, int2fp<4>(b3)) );
                         
                         buffer[ix] = red << 16 | green << 8 | blue;
                     }
@@ -316,10 +288,9 @@ void triangle(SDL_Surface* screen, const Vertex& v1, const Vertex& v2, const Ver
                         if(CX1 > 0 && CX2 > 0 && CX3 > 0)
                         {
                         
-                            fixedpt denom = fp_mul(Y2_Y3, X1_X3) + fp_mul(X3_X2, Y1_Y3);
-                            fixedpt lambda1 = fp_div( fp_mul(Y2_Y3, (ix<<4)-X3) + fp_mul(X3_X2, (iy<<4)-Y3), denom);
-                            fixedpt lambda2 = fp_div( fp_mul(Y3_Y1, (ix<<4)-X3) + fp_mul(X1_X3, (iy<<4)-Y3), denom);  
-                            fixedpt lambda3 = int2fp(1) - lambda1 - lambda2;
+                            const int lambda1 = fp_div<4>( fp_mul<4>(Y2_Y3, (ix<<4)-X3) + fp_mul<4>(X3_X2, (iy<<4)-Y3), denom);
+                            const int lambda2 = fp_div<4>( fp_mul<4>(Y3_Y1, (ix<<4)-X3) + fp_mul<4>(X1_X3, (iy<<4)-Y3), denom);  
+                            const int lambda3 = int2fp<4>(1) - lambda1 - lambda2;
 
                             int r1 = 0, g1 = 0, b1 = 0;
                             int r2 = 0, g2 = 0, b2 = 0;
@@ -335,9 +306,9 @@ void triangle(SDL_Surface* screen, const Vertex& v1, const Vertex& v2, const Ver
                             g3 = (v3.color >>  8) & 0xFF;
                             b3 = v3.color & 0xFF;
 
-                            int red   = fp2int( fp_mul(lambda1, int2fp(r1)) + fp_mul(lambda2, int2fp(r2)) + fp_mul(lambda3, int2fp(r3)) );
-                            int green = fp2int( fp_mul(lambda1, int2fp(g1)) + fp_mul(lambda2, int2fp(g2)) + fp_mul(lambda3, int2fp(g3)) );
-                            int blue  = fp2int( fp_mul(lambda1, int2fp(b1)) + fp_mul(lambda2, int2fp(b2)) + fp_mul(lambda3, int2fp(b3)) );
+                            int red   = fp2int<4>( fp_mul<4>(lambda1, int2fp<4>(r1)) + fp_mul<4>(lambda2, int2fp<4>(r2)) + fp_mul<4>(lambda3, int2fp<4>(r3)) );
+                            int green = fp2int<4>( fp_mul<4>(lambda1, int2fp<4>(g1)) + fp_mul<4>(lambda2, int2fp<4>(g2)) + fp_mul<4>(lambda3, int2fp<4>(g3)) );
+                            int blue  = fp2int<4>( fp_mul<4>(lambda1, int2fp<4>(b1)) + fp_mul<4>(lambda2, int2fp<4>(b2)) + fp_mul<4>(lambda3, int2fp<4>(b3)) );
                             
                             buffer[ix] = red << 16 | green << 8 | blue;
                         }
