@@ -1,7 +1,14 @@
+<<<<<<< HEAD
 #include <string>
 #include "SDL/SDL.h"
 #include "draw.hpp"
 #include "fixedpt.hpp"
+=======
+#include "SDL/SDL.h"
+#include <string>
+#include "draw.hpp"
+#include "fixedpt.h"
+>>>>>>> d9b9ea93a9d99ce91855115e053e9e2c8f7c2f11
 
 #define min3(a, b, c) std::min(std::min((a),(b)),(c))
 #define max3(a, b, c) std::max(std::max((a),(b)),(c))
